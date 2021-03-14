@@ -46,7 +46,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\MedatechEDI\packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
@@ -97,6 +97,7 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Include="MedatechUK.Deserial.nuspec" />
     <None Include="My Project\Application.myapp">
       <Generator>MyApplicationCodeGenerator</Generator>
       <LastGenOutput>Application.Designer.vb</LastGenOutput>
@@ -107,13 +108,14 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="packages.config" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MedatechUK.Log\MedatechUK.Log.vbproj">
       <Project>{def77d25-0edd-42ad-84da-941965dd0eba}</Project>
-      <Name>Medatechuk.Log</Name>
+      <Name>MedatechUK.Log</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\MedatechUK.Packages\MedatechUK.oData\MedatechUK.oData.vbproj">
+    <ProjectReference Include="..\MedatechUK.oData\MedatechUK.oData.vbproj">
       <Project>{92bbb2f7-f2a1-44e0-a64d-fafca1ad30a0}</Project>
       <Name>MedatechUK.oData</Name>
     </ProjectReference>

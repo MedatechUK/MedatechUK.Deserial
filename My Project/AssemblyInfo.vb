@@ -8,12 +8,12 @@ Imports System.Runtime.InteropServices
 
 ' Review the values of the assembly attributes
 
-<Assembly: AssemblyTitle("Lexor")>
-<Assembly: AssemblyDescription("")>
-<Assembly: AssemblyCompany("")>
-<Assembly: AssemblyProduct("Lexor")>
-<Assembly: AssemblyCopyright("Copyright ©  2021")>
-<Assembly: AssemblyTrademark("")>
+<Assembly: AssemblyTitle("MedatechUK MEF Deserialiser")>
+<Assembly: AssemblyDescription("Extensible framework for deserialising JSON/XML object notation.")>
+<Assembly: AssemblyCompany("MedatechUK")>
+<Assembly: AssemblyProduct("MedatechUK.Deserial")>
+<Assembly: AssemblyCopyright("Copyright ©MedatechUK  2021")>
+<Assembly: AssemblyTrademark("Future Proof Your Business")>
 
 <Assembly: ComVisible(False)>
 
