@@ -82,6 +82,30 @@ Namespace Deserialiser
 
         End Sub
 
+        Public Function LexByAssemblyName(AssemblyFullname As String) As Lexor
+            For Each l As Lazy(Of ILexor, ILexorProps) In Lexors
+                With TryCast(l.Value, Lexor)
+                    If String.Compare(l.Metadata.SerialType.FullName, AssemblyFullname) = 0 Then
+                        Return l.Value
+
+                    End If
+                End With
+            Next
+            Return Nothing
+        End Function
+
+        Public Function LexByType(AssemblyType As Type) As Lexor
+            For Each l As Lazy(Of ILexor, ILexorProps) In Lexors
+                With TryCast(l.Value, Lexor)
+                    If l.Metadata.SerialType Is AssemblyType Then
+                        Return l.Value
+
+                    End If
+                End With
+            Next
+            Return Nothing
+        End Function
+
 #Region "IDisposable Support"
         Private disposedValue As Boolean ' To detect redundant calls
 
