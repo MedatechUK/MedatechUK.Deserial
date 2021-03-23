@@ -53,34 +53,106 @@ Namespace Deserialiser
             End Get
         End Property
 
+        Private _LoadedAssemblies As New List(Of String)
+        Public ReadOnly Property LoadedAssemblies As List(Of String)
+            Get
+                Return _LoadedAssemblies
+            End Get
+        End Property
+
         <ImportMany()>
         Public Property Lexors As IEnumerable(Of Lazy(Of ILexor, ILexorProps))
         Dim _container As CompositionContainer
 
+#Region "CTOR"
+
         Sub New(ByRef logHandler As EventHandler)
 
+            Dim catalog = New AggregateCatalog()
             logHandlerDelegate = logHandler
 
-            Dim catalog = New AggregateCatalog()
-            catalog.Catalogs.Add(New DirectoryCatalog(New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName))
-            catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetEntryAssembly))
-            catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetExecutingAssembly))
+            Try
+                catalog.Catalogs.Add(New DirectoryCatalog(New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName))
 
-            Dim _container As New CompositionContainer(catalog)
-            _container.ComposeParts(Me)
+            Catch ex As Exception
+                Log("Checking for lexor extentions in [{0}].", New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName)
+                Log(ex)
+
+            End Try
+
+            Try
+                catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetEntryAssembly))
+
+            Catch ex As Exception
+                Log("Checking for lexors in assembly [{0}].", Assembly.GetEntryAssembly.FullName)
+                Log(ex)
+
+            End Try
+
+            If Not Assembly.GetExecutingAssembly = Assembly.GetEntryAssembly Then
+                Try
+                    catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetExecutingAssembly))
+
+                Catch ex As Exception
+                    Log("Checking for lexors in assembly [{0}].", Assembly.GetExecutingAssembly.FullName)
+                    Log(ex)
+
+                End Try
+            End If
+
+            Try
+                _container = New CompositionContainer(catalog)
+                _container.ComposeParts(Me)
+
+            Catch ex As ReflectionTypeLoadException
+                Log(ex)
+                For Each e In ex.Types
+                    If e Is Nothing Then
+                        Log("Missing type.")
+                    Else
+                        Log("{0}", e.Assembly.FullName)
+                    End If
+
+                Next
+
+            Catch ex As Exception
+                Log(ex)
+
+            End Try
 
             For Each l As Lazy(Of ILexor, ILexorProps) In Lexors
                 With TryCast(l.Value, Lexor)
+                    If Not _LoadedAssemblies.Contains(l.Metadata.SerialType.FullName) Then
+                        _LoadedAssemblies.Add(l.Metadata.SerialType.FullName)
+                        Log("Found Lexor [{0}].", l.Metadata.SerialType.FullName)
+                    End If
                     .SetMeta(l.Metadata, Me)
                     If l.Metadata.SerialType Is GetType(Deserialiser.lexdef) And _lexDef Is Nothing Then
                         _lexDef = l.Value
 
                     End If
+
                 End With
 
             Next
 
         End Sub
+
+#End Region
+
+#Region "Lexor by reference functions"
+
+        Public Function LexByName(name As String) As Lexor
+            For Each l As Lazy(Of ILexor, ILexorProps) In Lexors
+                With TryCast(l.Value, Lexor)
+                    If String.Compare(l.Metadata.LexName, name) = 0 Then
+                        Return l.Value
+
+                    End If
+                End With
+            Next
+            Return Nothing
+        End Function
 
         Public Function LexByAssemblyName(AssemblyFullname As String) As Lexor
             For Each l As Lazy(Of ILexor, ILexorProps) In Lexors
@@ -105,6 +177,8 @@ Namespace Deserialiser
             Next
             Return Nothing
         End Function
+
+#End Region
 
 #Region "IDisposable Support"
         Private disposedValue As Boolean ' To detect redundant calls
@@ -190,21 +264,20 @@ Namespace Deserialiser
         ''' <param name="Strm">A StreamReader contaning data to deserialise.</param>
         Overloads Function Deserialise(ByRef Strm As StreamReader) As Object Implements ILexor.Deserialise
 
-            Using l As New Loading(_props.LoadType, logHandlerDelegate)
-                Select Case _props.Parser
-                    Case eParser.json
-                        Return JsonConvert.DeserializeObject(Strm.ReadToEnd, _props.SerialType)
+            Select Case _props.Parser
+                Case eParser.json
+                    Log("Deserialising JSON data to assembly [{0}].", _props.SerialType.FullName)
+                    Return JsonConvert.DeserializeObject(Strm.ReadToEnd, _props.SerialType)
 
-                    Case eParser.xml
-                        Dim s As New XmlSerializer(_props.SerialType)
-                        Return s.Deserialize(Strm)
+                Case eParser.xml
+                    Log("Deserialising XML data to assembly [{0}].", _props.SerialType.FullName)
+                    Dim s As New XmlSerializer(_props.SerialType)
+                    Return s.Deserialize(Strm)
 
-                    Case Else
-                        Throw New NotSupportedException
+                Case Else
+                    Throw New NotSupportedException
 
                 End Select
-
-            End Using
 
         End Function
 
@@ -224,6 +297,7 @@ Namespace Deserialiser
 
                 Else
                     Log("Config for assembly [{0}] found in [{1}]", o.Config.assembly, ConfigFile.FullName)
+
                     Using sr As New IO.StreamReader(ConfigFile.FullName)
                         Me.Config = _myApp.lexDef.Deserialise(sr)
                     End Using
@@ -233,9 +307,11 @@ Namespace Deserialiser
                             o.Config.version.ToString,
                             Me.Config.version.ToString
                         )
+
                         Log("Updating config to version [{0}]",
                             o.Config.version.ToString
                         )
+
                         Me.Config = o.Config
                         saveConfig()
 
@@ -249,7 +325,7 @@ Namespace Deserialiser
                     End If
                 End If
 
-                Using l As New Loading(_props.LoadType, logHandlerDelegate)
+                Using l As New Loading(_props.LoadType, AddressOf MedatechUK.Logging.Events.logHandler)
                     Dim ob As Object
                     Select Case _props.Parser
                         Case eParser.json
@@ -270,6 +346,7 @@ Namespace Deserialiser
 
                     Dim ex As Exception = l.Post(Environment)
                     If Not ex Is Nothing Then
+                        Throw ex
 
                     End If
 
@@ -294,13 +371,12 @@ Namespace Deserialiser
         End Property
 
         Public Sub saveConfig() Implements ILexor.saveConfig
-
             Dim writer As XmlSerializer
             Try
                 writer = New XmlSerializer(GetType(lexdef))
             Catch : End Try
-            Using file As New System.IO.StreamWriter(ConfigFile.FullName)
-                writer.Serialize(file, Me.Config)
+            Using f As New System.IO.StreamWriter(ConfigFile.FullName)
+                writer.Serialize(f, Me.Config)
             End Using
 
         End Sub
