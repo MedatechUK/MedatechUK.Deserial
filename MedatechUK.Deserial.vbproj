@@ -69,6 +69,7 @@
     <Import Include="System.Threading.Tasks" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ArchiveFile.vb" />
     <Compile Include="lexdef.vb" />
     <Compile Include="lexor.vb" />
     <Compile Include="My Project\AssemblyInfo.vb" />
@@ -87,6 +88,7 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <Compile Include="objectParser.vb" />
+    <Compile Include="propMarkup.vb" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="My Project\Resources.resx">

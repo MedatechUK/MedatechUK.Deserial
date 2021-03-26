@@ -217,7 +217,17 @@ Namespace Deserialiser
 
 #Region "Recursive CTOR / Parse"
 
-        Sub New(ByRef t As Type, Optional Parent As LoadLine = Nothing)
+        Sub New(ByRef t As Type, Optional ByRef Parent As LoadLine = Nothing)
+
+            While ClassEnumOnly(t)
+                For Each prop As PropertyInfo In t.GetProperties
+                    If InheritsOrImplements(prop.PropertyType, GetType(IEnumerable)) Then
+                        t = prop.PropertyType.GetGenericArguments().FirstOrDefault
+                        Exit For
+                    End If
+                Next
+
+            End While
 
             _myType = t
             If Parent Is Nothing Then
@@ -225,7 +235,7 @@ Namespace Deserialiser
                 myRecordTypes.Add(t.Name, Me)
                 Parent = Me
             Else
-                _recordtype = Parent.myRecordTypes.Count + 1
+                _recordtype = Parent.myRecordTypes.Count
             End If
 
             If Not Parent.myTypes.Keys.Contains(t) Then
@@ -233,34 +243,43 @@ Namespace Deserialiser
             End If
 
             For Each prop As PropertyInfo In t.GetProperties
-                Select Case prop.PropertyType.Name.ToLower
-                    Case "string"
-                        Me.Add(prop.Name, String.Format("TEXT{0}", TextNum.ToString))
 
-                    Case "integer"
-                        Me.Add(prop.Name, String.Format("INT{0}", intNum.ToString))
+                If Not PropIgnore(prop) Then
 
-                    Case "date"
-                        Me.Add(prop.Name, String.Format("DATE{0}", dateNum.ToString))
+                    Select Case prop.PropertyType.Name.ToLower
+                        Case "string"
+                            Me.Add(prop.Name, String.Format("TEXT{0}", TextNum.ToString))
 
-                    Case Else
-                        If InheritsOrImplements(prop.PropertyType, GetType(IEnumerable)) Then
-                            If Not Enumerable.Keys.Contains(prop.Name) Then
-                                Enumerable.Add(prop.Name, New LoadLine(prop.PropertyType.GetGenericArguments().FirstOrDefault, Parent))
-                                Parent.myRecordTypes.Add(prop.Name, Enumerable(prop.Name))
+                        Case "integer", "int32"
+                            Me.Add(prop.Name, String.Format("INT{0}", intNum.ToString))
+
+                        Case "date"
+                            Me.Add(prop.Name, String.Format("DATE{0}", dateNum.ToString))
+
+                        Case Else
+                            If InheritsOrImplements(prop.PropertyType, GetType(IEnumerable)) Then
+                                If Not Enumerable.Keys.Contains(prop.Name) Then
+                                    Enumerable.Add(prop.Name, Nothing)
+                                    Parent.myRecordTypes.Add(prop.Name, Nothing)
+                                    Enumerable(prop.Name) = New LoadLine(prop.PropertyType.GetGenericArguments().FirstOrDefault, Parent)
+                                    Parent.myRecordTypes(prop.Name) = Enumerable(prop.Name)
+
+                                End If
+
+                            Else
+                                If Not Child.Keys.Contains(prop.Name) Then
+                                    Child.Add(prop.Name, Nothing)
+                                    Parent.myRecordTypes.Add(prop.Name, Nothing)
+                                    Child(prop.Name) = New LoadLine(prop.PropertyType, Parent)
+                                    Parent.myRecordTypes(prop.Name) = Child(prop.Name)
+
+                                End If
 
                             End If
 
-                        Else
-                            If Not Child.Keys.Contains(prop.Name) Then
-                                Child.Add(prop.Name, New LoadLine(prop.PropertyType, Parent))
-                                Parent.myRecordTypes.Add(prop.Name, Child(prop.Name))
+                    End Select
 
-                            End If
-
-                        End If
-
-                End Select
+                End If
 
             Next
 
@@ -268,40 +287,74 @@ Namespace Deserialiser
 
         Sub Parse(ByRef ob As Object, ByRef load As Loading, ByRef Parent As LoadLine)
 
-            Dim thistype As String = ob.GetType().FullName
-            With load.AddRow(Parent.Config.RecordTypeByAssembly(thistype).type)
-                Dim x As lexdefAssembly = Parent.Config.assemblyByName(thistype)
+            If ClassEnumOnly(ob.GetType) Then
                 For Each prop As PropertyInfo In ob.GetType.GetProperties
-                    If x.propertyByName(prop.Name).PropType = ePropertyType.field Then
-                        .setProperty(
-                            GetPropertyValue(ob, x.propertyByName(prop.Name).name),
-                            x.propertyByName(prop.Name).destname
-                        )
-                    End If
-                Next
-
-                For Each prop As PropertyInfo In ob.GetType.GetProperties
-                    If x.propertyByName(prop.Name).PropType = ePropertyType.type Then
-                        Parse(GetPropertyValue(ob, x.propertyByName(prop.Name).name), load, Parent)
-                    End If
-                Next
-
-                For Each prop As PropertyInfo In ob.GetType.GetProperties
-                    If x.propertyByName(prop.Name).PropType = ePropertyType.enumeration Then
-                        For Each o As Object In GetPropertyValue(ob, x.propertyByName(prop.Name).name)
+                    If InheritsOrImplements(prop.PropertyType, GetType(IEnumerable)) Then
+                        For Each o As Object In GetPropertyValue(ob, prop.Name)
                             Parse(o, load, Parent)
                         Next
-
+                        Exit For
                     End If
                 Next
 
-            End With
+            Else
+
+                Dim thistype As String = ob.GetType().FullName
+                With load.AddRow(Parent.Config.RecordTypeByAssembly(thistype).type)
+                    Dim x As lexdefAssembly = Parent.Config.assemblyByName(thistype)
+                    For Each prop As PropertyInfo In ob.GetType.GetProperties
+                        If Not PropIgnore(prop) Then
+                            If x.propertyByName(prop.Name).PropType = ePropertyType.field Then
+                                .setProperty(
+                                    GetPropertyValue(ob, x.propertyByName(prop.Name).name),
+                                    x.propertyByName(prop.Name).destname
+                                )
+                            End If
+                        End If
+                    Next
+
+                    For Each prop As PropertyInfo In ob.GetType.GetProperties
+                        If Not PropIgnore(prop) Then
+                            If x.propertyByName(prop.Name).PropType = ePropertyType.type Then
+                                Parse(GetPropertyValue(ob, x.propertyByName(prop.Name).name), load, Parent)
+                            End If
+                        End If
+                    Next
+
+                    For Each prop As PropertyInfo In ob.GetType.GetProperties
+                        If Not PropIgnore(prop) Then
+                            If x.propertyByName(prop.Name).PropType = ePropertyType.enumeration Then
+                                For Each o As Object In GetPropertyValue(ob, x.propertyByName(prop.Name).name)
+                                    Parse(o, load, Parent)
+                                Next
+
+                            End If
+                        End If
+                    Next
+
+                End With
+
+            End If
 
         End Sub
 
 #End Region
 
 #Region "Reflection subs"
+
+        Private Function PropIgnore(ByRef prop As PropertyInfo) As Boolean
+            Dim c As MedatechUK.Deserialiser.Property = prop.GetCustomAttribute(Of MedatechUK.Deserialiser.Property)
+            If c Is Nothing Then Return False
+            Return c.Ignore
+
+        End Function
+
+        Private Function ClassEnumOnly(ByRef t As Type) As Boolean
+            Dim c As Deserialiser.Class = t.GetCustomAttribute(Of Deserialiser.Class)
+            If c Is Nothing Then Return False
+            Return c.EnumerateOnly
+
+        End Function
 
         Public Function GetPropertyValue(ByVal obj As Object, ByVal PropName As String) As Object
             Dim objType As Type = obj.GetType()
