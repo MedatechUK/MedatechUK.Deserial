@@ -6,6 +6,7 @@ Imports System.Xml.Serialization
 Imports Newtonsoft.Json
 Imports MedatechUK.oData
 Imports MedatechUK.Logging
+Imports System.Web
 
 Namespace Deserialiser
 
@@ -43,7 +44,7 @@ Namespace Deserialiser
 #Region "Lexor MEF Extensions"
 
     Public Class AppExtension
-        Inherits logable
+        Inherits Logable
         Implements IDisposable
 
         Private _lexDef As Lexor = Nothing
@@ -71,33 +72,46 @@ Namespace Deserialiser
             Dim catalog = New AggregateCatalog()
             logHandlerDelegate = logHandler
 
-            Try
-                catalog.Catalogs.Add(New DirectoryCatalog(New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName))
-
-            Catch ex As Exception
-                Log("Checking for lexor extentions in [{0}].", New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName)
-                Log(ex)
-
-            End Try
-
-            Try
-                catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetEntryAssembly))
-
-            Catch ex As Exception
-                Log("Checking for lexors in assembly [{0}].", Assembly.GetEntryAssembly.FullName)
-                Log(ex)
-
-            End Try
-
-            If Not Assembly.GetExecutingAssembly = Assembly.GetEntryAssembly Then
+            If HttpContext.Current Is Nothing Then
                 Try
-                    catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetExecutingAssembly))
+                    catalog.Catalogs.Add(New DirectoryCatalog(New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName))
 
                 Catch ex As Exception
-                    Log("Checking for lexors in assembly [{0}].", Assembly.GetExecutingAssembly.FullName)
+                    Log("Checking for lexor extentions in [{0}].", New IO.FileInfo(Assembly.GetEntryAssembly.Location).Directory.FullName)
                     Log(ex)
 
                 End Try
+
+                Try
+                    catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetEntryAssembly))
+
+                Catch ex As Exception
+                    Log("Checking for lexors in assembly [{0}].", Assembly.GetEntryAssembly.FullName)
+                    Log(ex)
+
+                End Try
+
+                If Not Assembly.GetExecutingAssembly = Assembly.GetEntryAssembly Then
+                    Try
+                        catalog.Catalogs.Add(New AssemblyCatalog(Assembly.GetExecutingAssembly))
+
+                    Catch ex As Exception
+                        Log("Checking for lexors in assembly [{0}].", Assembly.GetExecutingAssembly.FullName)
+                        Log(ex)
+
+                    End Try
+                End If
+
+            Else ' we're a web service
+                Try
+                    catalog.Catalogs.Add(New DirectoryCatalog(Path.Combine(HttpContext.Current.Server.MapPath("/"), "bin")))
+
+                Catch ex As Exception
+                    Log("Checking for lexor extentions in [{0}].", Path.Combine(HttpContext.Current.Server.MapPath("/"), "bin"))
+                    Log(ex)
+
+                End Try
+
             End If
 
             Try
@@ -110,7 +124,7 @@ Namespace Deserialiser
                     If e Is Nothing Then
                         Log("Missing type.")
                     Else
-                        Log("{0}", e.Assembly.FullName)
+                        Log("{0}", e.FullName)
                     End If
 
                 Next
@@ -220,7 +234,7 @@ Namespace Deserialiser
 #Region "Lexor class"
 
     Public MustInherit Class Lexor
-        Inherits logable
+        Inherits Logable
         Implements ILexor
 
 #Region "Meta data"
@@ -277,7 +291,7 @@ Namespace Deserialiser
                 Case Else
                     Throw New NotSupportedException
 
-                End Select
+            End Select
 
         End Function
 
@@ -321,11 +335,12 @@ Namespace Deserialiser
                             Me.Config.version.ToString
                         )
                         Log("Using .config file for form load definitions.")
+                        o.Config = Me.Config
 
                     End If
                 End If
 
-                Using l As New Loading(_props.LoadType, AddressOf MedatechUK.Logging.Events.logHandler)
+                Using l As New Loading(_props.LoadType, Me.logHandler)
                     Dim ob As Object
                     Select Case _props.Parser
                         Case eParser.json
@@ -344,10 +359,14 @@ Namespace Deserialiser
 
                     o.Parse(ob, l, o)
 
-                    Dim ex As Exception = l.Post(Environment)
-                    If Not ex Is Nothing Then
-                        Throw ex
+                    ' added this so that a blank environment will simply 
+                    ' generate the lex config, without posting to oData
+                    If Len(Environment) > 0 Then
+                        Dim ex As Exception = l.Post(Environment)
+                        If Not ex Is Nothing Then
+                            Throw ex
 
+                        End If
                     End If
 
                 End Using

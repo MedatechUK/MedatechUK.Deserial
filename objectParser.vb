@@ -185,6 +185,13 @@ Namespace Deserialiser
             End Get
         End Property
 
+        Private _realnum As Integer = 0
+        Public ReadOnly Property realNum As Integer
+            Get
+                _realnum += 1
+                Return _realnum
+            End Get
+        End Property
 #End Region
 
 #Region "Child / Enumerable Dictionary"
@@ -255,6 +262,9 @@ Namespace Deserialiser
 
                         Case "date"
                             Me.Add(prop.Name, String.Format("DATE{0}", dateNum.ToString))
+
+                        Case "double", "decimal"
+                            Me.Add(prop.Name, String.Format("REAL{0}", realNum.ToString))
 
                         Case Else
                             If InheritsOrImplements(prop.PropertyType, GetType(IEnumerable)) Then

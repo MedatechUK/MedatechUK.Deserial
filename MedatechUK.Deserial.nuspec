@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>MedatechUK.Deserial</id>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <authors>Simon Barnett</authors>
     <owners>Simon Barnett</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -12,7 +12,13 @@
     <description>Extensible framework for deserialising JSON/XML object notation.</description>
     <releaseNotes>Initial Release.</releaseNotes>
     <repository type="git" url="https://github.com/MedatechUK/MedatechUK.Deserial" />
-
+    <dependencies>
+      <group>
+        <dependency id="MedatechUK.Log" version="1.2.0" />
+        <dependency id="MedatechUK.oData" version="1.9.0" />
+        <dependency id="Newtonsoft.Json" version="12.0.1" />
+      </group>
+    </dependencies>
   </metadata>
   <files>
     <file src="M:\MedatechUK.Packages\MedatechUK.deserial\support\medatech.png" target="medatech.png" />
