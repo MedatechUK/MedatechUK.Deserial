@@ -104,10 +104,10 @@ Namespace Deserialiser
 
             Else ' we're a web service
                 Try
-                    catalog.Catalogs.Add(New DirectoryCatalog(Path.Combine(HttpContext.Current.Server.MapPath("/"), "bin")))
+                    catalog.Catalogs.Add(New DirectoryCatalog(Path.Combine(HttpContext.Current.Server.MapPath("/api/"), "bin")))
 
                 Catch ex As Exception
-                    Log("Checking for lexor extentions in [{0}].", Path.Combine(HttpContext.Current.Server.MapPath("/"), "bin"))
+                    Log("Checking for lexor extentions in [{0}].", Path.Combine(HttpContext.Current.Server.MapPath("/api/"), "bin"))
                     Log(ex)
 
                 End Try
@@ -138,7 +138,7 @@ Namespace Deserialiser
                 With TryCast(l.Value, Lexor)
                     If Not _LoadedAssemblies.Contains(l.Metadata.SerialType.FullName) Then
                         _LoadedAssemblies.Add(l.Metadata.SerialType.FullName)
-                        Log("Found Lexor [{0}].", l.Metadata.SerialType.FullName)
+                        ' Log("Found Lexor [{0}].", l.Metadata.SerialType.FullName)
                     End If
                     .SetMeta(l.Metadata, Me)
                     If l.Metadata.SerialType Is GetType(Deserialiser.lexdef) And _lexDef Is Nothing Then
