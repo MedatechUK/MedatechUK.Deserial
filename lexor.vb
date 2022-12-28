@@ -7,10 +7,14 @@ Imports Newtonsoft.Json
 Imports MedatechUK.oData
 Imports MedatechUK.Logging
 Imports System.Web
+Imports System.Net
+Imports System.Xml
+Imports System.Web.Configuration
 
 Namespace Deserialiser
 
 #Region "Enums"
+
     Public Enum eParser
         xml
         json
@@ -22,8 +26,10 @@ Namespace Deserialiser
 #Region "Interfaces"
 
     Public Interface ILexor
+
         Function Deserialise(ByRef Strm As System.IO.StreamReader) As Object
         Sub Deserialise(ByRef Strm As System.IO.StreamReader, Environment As String)
+        Sub Deserialise(ByRef ob As Object, Environment As String)
         ReadOnly Property ConfigFile As FileInfo
         Property Config As lexdef
         Sub saveConfig()
@@ -103,11 +109,12 @@ Namespace Deserialiser
                 End If
 
             Else ' we're a web service
+
                 Try
-                    catalog.Catalogs.Add(New DirectoryCatalog(Path.Combine(HttpContext.Current.Server.MapPath("/api/"), "bin")))
+                    catalog.Catalogs.Add(New DirectoryCatalog(Path.Combine(HttpContext.Current.Server.MapPath(virtualDir), "bin")))
 
                 Catch ex As Exception
-                    Log("Checking for lexor extentions in [{0}].", Path.Combine(HttpContext.Current.Server.MapPath("/api/"), "bin"))
+                    Log("Checking for lexor extentions in [{0}].", Path.Combine(HttpContext.Current.Server.MapPath(virtualDir), "bin"))
                     Log(ex)
 
                 End Try
@@ -152,6 +159,16 @@ Namespace Deserialiser
 
         End Sub
 
+        Private ReadOnly Property virtualDir As String
+            Get
+                If WebConfigurationManager.AppSettings("virtualdir") Is Nothing Then
+                    Return "/api/"
+                Else
+                    Return String.Format("/{0}/", WebConfigurationManager.AppSettings("virtualdir"))
+                End If
+            End Get
+        End Property
+
 #End Region
 
 #Region "Lexor by reference functions"
@@ -195,6 +212,7 @@ Namespace Deserialiser
 #End Region
 
 #Region "IDisposable Support"
+
         Private disposedValue As Boolean ' To detect redundant calls
 
         ' IDisposable
@@ -263,7 +281,190 @@ Namespace Deserialiser
 
 #End Region
 
+#Region "Factory"
+
+        Private _factory As Object = Nothing
+        Function CreateType() As Object
+            _factory = Activator.CreateInstance(_props.SerialType)
+            Return _factory
+        End Function
+
+        Function CreateType(xml As XmlReader) As Object
+            Dim s As XmlSerializer = New XmlSerializer(Props.SerialType)
+            _factory = s.Deserialize(xml)
+            Return _factory
+
+        End Function
+
+        Private _Request As Net.HttpWebRequest
+        Public Function Serialise(Method As Http.HttpMethod, uri As UriBuilder, Credentials As NetworkCredential, Optional proxy As IWebProxy = Nothing) As Object
+
+            Try
+                _Request = CType(Net.HttpWebRequest.Create(uri.Uri), Net.HttpWebRequest)
+                With _Request
+                    .Method = Method.Method
+                    .Proxy = proxy
+                    .UserAgent = "MedatechUK"
+                    Select Case _props.Parser
+                        Case eParser.json
+                            .ContentType = "application/json"
+                            .Accept = "application/json"
+
+                        Case Else
+                            .ContentType = "application/xml"
+                            .Accept = "application/xml"
+
+                    End Select
+
+                    .Credentials = Credentials
+
+                End With
+
+            Catch ex As Exception
+                Throw New Exception(
+                    String.Format(
+                        "{0}",
+                        ex.Message
+                    )
+                )
+
+            End Try
+
+            Dim myEncoder As New System.Text.ASCIIEncoding
+            Dim Request As MemoryStream
+            Select Case _props.Parser
+                Case eParser.json
+                    Request = New MemoryStream(myEncoder.GetBytes(JsonConvert.SerializeObject(_factory, Newtonsoft.Json.Formatting.Indented)))
+
+                Case Else
+                    Dim sw1 = New StringWriter()
+                    Dim xs1 As New XmlSerializer(_props.SerialType)
+                    xs1.Serialize(New XmlTextWriter(sw1), _factory)
+
+                    Request = New MemoryStream(myEncoder.GetBytes(sw1.ToString()))
+
+            End Select
+
+            Dim e As Object
+            Dim buffer(1024) As Byte
+            Dim bytesRead As Integer
+
+            System.Net.ServicePointManager.ServerCertificateValidationCallback =
+              Function(se As Object,
+              cert As System.Security.Cryptography.X509Certificates.X509Certificate,
+              chain As System.Security.Cryptography.X509Certificates.X509Chain,
+              sslerror As System.Net.Security.SslPolicyErrors) True
+
+            With _Request
+                Logging.Log(Me, "{0} {1}", .Method.ToUpper, .RequestUri.ToString)
+                Select Case _props.Parser
+                    Case eParser.json
+                        Logging.Log(JsonConvert.SerializeObject(_factory, Newtonsoft.Json.Formatting.Indented))
+
+                    Case Else
+                        Dim sw1 = New StringWriter()
+                        Dim xs1 As New XmlSerializer(_props.SerialType)
+                        xs1.Serialize(New XmlTextWriter(sw1), _factory)
+                        Logging.Log(sw1.ToString())
+
+                End Select
+
+                Try
+                    .ContentLength = Request.Length
+                    Using requestStream As Stream = .GetRequestStream()
+                        With requestStream
+                            While True
+                                bytesRead = Request.Read(buffer, 0, buffer.Length)
+                                If bytesRead = 0 Then
+                                    Exit While
+
+                                End If
+                                .Write(buffer, 0, bytesRead)
+
+                            End While
+
+                        End With
+
+                    End Using
+
+                    e = .GetResponse()
+
+                Catch ex As WebException
+                    e = ex
+
+                Catch ex As Exception
+                    e = ex
+
+                End Try
+
+            End With
+
+            Return e
+
+        End Function
+
+#End Region
+
 #Region "Deserialiser"
+
+        Overloads Sub Deserialise(ByRef ob As Object, Environment As String) Implements ILexor.Deserialise
+
+            Using o As New objectParser(_props.SerialType, Me)
+                If Not ConfigFile.Exists Then
+                    Log("Assembly config file not found [{0}]", ConfigFile.FullName)
+                    Me.Config = o.Config
+                    Log("Generating config for assembly [{0}]", o.Config.assembly)
+                    saveConfig()
+
+                Else
+                    Log("Config for assembly [{0}] found in [{1}]", o.Config.assembly, ConfigFile.FullName)
+
+                    Using sr As New IO.StreamReader(ConfigFile.FullName)
+                        Me.Config = _myApp.lexDef.Deserialise(sr)
+                    End Using
+
+                    If Not String.Compare(o.Config.version, Me.Config.version) = 0 Then
+                        Log("Assembly version [{0}] != config version [{1}]",
+                            o.Config.version.ToString,
+                            Me.Config.version.ToString
+                        )
+
+                        Log("Updating config to version [{0}]",
+                            o.Config.version.ToString
+                        )
+
+                        Me.Config = o.Config
+                        saveConfig()
+
+                    Else
+                        Log("Assembly version [{0}] = config version [{1}]",
+                            o.Config.version.ToString,
+                            Me.Config.version.ToString
+                        )
+                        Log("Using .config file for form load definitions.")
+                        o.Config = Me.Config
+
+                    End If
+                End If
+
+                Using l As New Loading(_props.LoadType, Me.logHandler)
+                    o.Parse(ob, l, o)
+
+                    ' added this so that a blank environment will simply 
+                    ' generate the lex config, without posting to oData
+                    If Len(Environment) > 0 Then
+                        Dim ex As Exception = l.Post(Environment)
+                        If Not ex Is Nothing Then
+                            Throw ex
+
+                        End If
+                    End If
+
+                End Using
+
+            End Using
+
+        End Sub
 
         ''' <summary>
         ''' Uses the exported properties of the iLexor to deserialise.

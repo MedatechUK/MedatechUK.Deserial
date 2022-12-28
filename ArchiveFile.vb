@@ -9,11 +9,13 @@ Namespace Deserialiser
         Private _initDir As DirectoryInfo
         Private _fName As String
         Private _ext As String
+        Private _ArchBadMail As Boolean = True
 
         Public badmail As Boolean = False
 
-        Sub New(fn As FileInfo)
+        Sub New(fn As FileInfo, Optional ArchBadMail As Boolean = True)
             _fn = fn
+            _ArchBadMail = ArchBadMail
 
         End Sub
 
@@ -65,22 +67,32 @@ Namespace Deserialiser
         Protected Overridable Sub Dispose(disposing As Boolean)
             If Not disposedValue Then
                 If disposing Then
-                    If _fn.Exists Then
-                        With ArchiveDir
-                            If Not .Exists Then .Create()
-                            Dim test As New FileInfo(Path.Combine(.FullName, String.Format("{0}{1}{2}", Replace(_fn.Name, _fn.Extension, ""), Version, _fn.Extension)))
-                            While test.Exists
-                                test = New FileInfo(Path.Combine(.FullName, String.Format("{0}{1}{2}", Replace(_fn.Name, _fn.Extension, ""), Version, _fn.Extension)))
-                            End While
-                            File.Move(_fn.FullName, test.FullName)
+                    If Not (badmail) Or (badmail And _ArchBadMail) Then
+                        Try
+                            _fn.Refresh()
+                            If _fn.Exists Then
+                                With ArchiveDir
+                                    If Not .Exists Then .Create()
+                                    Dim test As New FileInfo(Path.Combine(.FullName, String.Format("{0}{1}{2}", Replace(_fn.Name, _fn.Extension, ""), Version, _fn.Extension)))
+                                    While test.Exists
+                                        test = New FileInfo(Path.Combine(.FullName, String.Format("{0}{1}{2}", Replace(_fn.Name, _fn.Extension, ""), Version, _fn.Extension)))
+                                    End While
+                                    _fn.Refresh()
+                                    If _fn.Exists Then
+                                        File.Move(_fn.FullName, test.FullName)
+                                    End If
+                                End With
+                            End If
+                        Catch ex As Exception
 
-                        End With
+                        End Try
+
                     End If
                 End If
 
-                ' TODO: free unmanaged resources (unmanaged objects) and override Finalize() below.
-                ' TODO: set large fields to null.
-            End If
+                    ' TODO: free unmanaged resources (unmanaged objects) and override Finalize() below.
+                    ' TODO: set large fields to null.
+                End If
             disposedValue = True
         End Sub
 
